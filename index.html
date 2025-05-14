@@ -58,12 +58,12 @@
 <body>
     <div id="container">
         <header>
-            <h1>Terra Invicta Drive Performance Chart (0.4.80)</h1>
+            <h1>Terra Invicta Drive Performance Chart (0.4.86)</h1>
             <p class="instructions-title">Instructions:</p>
             <p class="instructions">
                 Press 'f' to enter/exit fullscreen.<br>
-                Click a legend entry to remove those drives from the plot.<br>
-                Double-click a legend entry to view only those drives.
+                Click a legend entry to remove those drives from the plot. Double-click a legend entry to view only those drives.<br>
+                Click on a marker to open its project on Sarah's tech tree website.
             </p>
         </header>
 
@@ -139,8 +139,6 @@
                     x: drive.EV_kps,
                     y: drive.thrust_N / 1000
                 });
-
-                console.log(drive_class);
             });
 
             const class_colors = {};
@@ -250,8 +248,31 @@
                 showlegend: true,
             };
 
+            Plotly.newPlot('plot', traces, layout, { responsive: true }).then(() => {
+                document.getElementById('plot').on('plotly_click', function(eventData) {
+                    const point = eventData.points[0];
+                    const clickedDriveName = point.text;
 
-            Plotly.newPlot('plot', traces, layout, {responsive: true});
+                    const clickedDrive = data.find(d => {
+                        const fullName = d.friendlyName || d.dataName || '';
+                        const baseName = fullName.includes('x')
+                            ? fullName.substring(0, fullName.lastIndexOf('x')).trim()
+                            : fullName;
+
+                        const cleanedBaseName = baseName === 'Superconducting Mass Driver'
+                            ? baseName
+                            : baseName.replace('Drive', '').replace('Rocket', '').trim();
+
+                        return cleanedBaseName === clickedDriveName;
+                    });
+
+                    if (clickedDrive && clickedDrive.requiredProjectName) {
+                        const url = 'https://sarahwatt.ca/terra-invicta/techtree/#' + clickedDrive.requiredProjectName;
+                        window.open(url, '_blank');
+                    }
+                })});
+
+
         });
 
         document.addEventListener('keydown', (e) => {
@@ -279,6 +300,9 @@
                 }
             }
         });
+
+
+    
     </script>
 </body>
 </html>
