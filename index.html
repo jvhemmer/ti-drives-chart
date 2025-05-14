@@ -137,7 +137,8 @@
 
                 points[base_name].push({
                     x: drive.EV_kps,
-                    y: drive.thrust_N / 1000
+                    y: drive.thrust_N / 1000,
+                    cooling: drive.cooling
                 });
             });
 
@@ -164,9 +165,13 @@
                     class_points[drive_class].x.push(v.x);
                     class_points[drive_class].y.push(v.y);
                     class_points[drive_class].text.push(base_name);
+                    class_points[drive_class].customdata = class_points[drive_class].customdata || [];
+                    class_points[drive_class].customdata.push(v.cooling || 'Unknown');
                 });
             }
 
+            
+            
 
             // One trace per classification
             const traces = [];
@@ -192,10 +197,12 @@
                     textfont: {
                         size: 10
                     },
+                    customdata: coords.customdata,
                     hovertemplate: 
                         '%{text}<br>' +
                         'EV: %{x:.1f} km/s<br>' +
                         'Thrust: %{y:.0f} kN<br>' +
+                        'Cooling: %{customdata}<br>' +
                         '<extra></extra>'
                 });
             }
