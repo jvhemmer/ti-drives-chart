@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terra Invicta Drive Chart</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .instructions-title {
+            font-size: 18px;
+            font-style: bold;
+            font-weight: bold;
+            color: #444;
+            line-height: 1.5;
+            text-align: center;
+            margin-top: 0px;
+            margin-bottom: 0px;
+            padding: 0;
+        }
+        .instructions {
+            font-size: 14px;
+            font-style: normal;
+            color: #444;
+            line-height: 1.5;
+            text-align: center;
+            margin-top: 0px;
+            margin-bottom: 0;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+        }
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+        }
+        header {
+            flex: 0 0 auto; /* Fixed size for header */
+            padding: 0px;
+            text-align: center;
+            background-color: #f0f0f0;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 20px;
+            font-weight: normal;
+            color: #333333;
+            line-height: 1;
+        }
+        #plot {
+            flex: 1 1 auto; /* Fills the remaining space */
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <header>
+            <h1>Terra Invicta Drive Performance Chart (0.4.80)</h1>
+            <p class="instructions-title">Instructions:</p>
+            <p class="instructions">
+                Press 'f' to enter/exit fullscreen.<br>
+                Click a legend entry to remove those drives from the plot.<br>
+                Double-click a legend entry to view only those drives.
+            </p>
+        </header>
+
+        <div id="plot"></div>
+    </div>
+
+    <script>
+        fetch('TIDriveTemplate.json')
+        .then(response => response.json())
+        .then(data => {
+            const points = {};
+            const classifications = {};
+
+            data.forEach(drive => {
+                if (!('EV_kps' in drive) || !('thrust_N' in drive)) return;
+
+                let name = drive.friendlyName || drive.dataName || 'Unknown';
+                let base_name;
+                if (name.includes('x')) {
+                    base_name = name.substring(0, name.lastIndexOf('x')).trim();
+                } else {
+                    base_name = name;
+                }
+
+                // Preserve 'Drive' for Mass Driver
+                if (base_name !== 'Superconducting Mass Driver') {
+                    base_name = base_name.replace('Drive', '').replace('Rocket', '').trim();
+                }
+
+                const multiplier = drive.thrusters;
+                let drive_class = drive.driveClassification || 'Unknown';
+
+                // Add subclasses for Thermal Fission drives
+                if (drive_class === 'Fission_Thermal') {
+                    const plant = drive.requiredPowerPlant || '';
+                    let subclass = '';
+
+                    if (plant.includes('Solid')) subclass = 'solid';
+                    else if (plant.includes('Liquid')) subclass = 'liquid';
+                    else if (plant.includes('Gas')) subclass = 'gas';
+                    else if (plant.includes('Vapor')) subclass = 'vapor';
+
+                    drive_class = `${drive_class} (${subclass})`;
+                }
+
+                // Add subclasses for Thermal Fusion drives
+                if (drive_class === 'Fusion_Thermal') {
+                    const plant = drive.requiredPowerPlant || '';
+                    let subclass = ''
+
+                    if (plant.includes('Electrostatic')) subclass = 'electrostatic';
+                    else if (plant.includes('Mirrored')) subclass = 'mirrored magnetic';
+                    else if (plant.includes('Toroid')) subclass = 'toroid magnetic';
+                    else if (plant.includes('Hybrid')) subclass = 'hybrid'
+                    else if (plant.includes('Z_Pinch')) subclass = 'Z-pinch'
+                    else if (plant.includes('Inertial')) subclass = 'inertial'
+
+                    drive_class = `${drive_class} (${subclass})`;
+                }
+
+                // Cleanup class/subclass names
+                drive_class = drive_class.replace(/_/g, ' '); // replace underscores for space
+                drive_class = drive_class.replace(/([a-z])([A-Z])/g, '$1 $2'); // add space when a lowercase character is followed by an uppcase character (SaltWater -> Salt Water)
+
+                if (multiplier !== 1) return; // Only keep x1 drives
+
+                if (!(base_name in points)) {
+                    points[base_name] = [];
+                    classifications[base_name] = drive_class;
+                }
+
+                points[base_name].push({
+                    x: drive.EV_kps,
+                    y: drive.thrust_N / 1000
+                });
+
+                console.log(drive_class);
+            });
+
+            const class_colors = {};
+            const unique_classes = Array.from(new Set(Object.values(classifications)));
+
+            const color_palette = [
+                'red', 'blue', 'purple', 'orange', 'green', 'brown', 'pink', 'gray', 'black', 'magenta'
+            ];
+            unique_classes.forEach((cls, idx) => {
+                class_colors[cls] = color_palette[idx % color_palette.length];
+            });
+
+            const class_points = {};
+
+            // Group all x1 points by drive classification
+            for (const [base_name, values] of Object.entries(points)) {
+                const drive_class = classifications[base_name];
+                if (!(drive_class in class_points)) {
+                    class_points[drive_class] = {x: [], y: [], text: []};
+                }
+
+                values.forEach(v => {
+                    class_points[drive_class].x.push(v.x);
+                    class_points[drive_class].y.push(v.y);
+                    class_points[drive_class].text.push(base_name);
+                });
+            }
+
+
+            // One trace per classification
+            const traces = [];
+
+            for (const [drive_class, coords] of Object.entries(class_points)) {
+                // Alternate label positions: top, bottom, top, bottom...
+                const textpositions = coords.x.map((x, idx) => {
+                    return idx % 2 === 0 ? 'top center' : 'bottom center';
+                });
+
+                traces.push({
+                    x: coords.x,
+                    y: coords.y,
+                    text: coords.text,
+                    mode: 'markers+text',
+                    name: drive_class,
+                    marker: {
+                        size: 8,
+                        color: class_colors[drive_class],
+                        opacity: 1.0
+                    },
+                    textposition: textpositions,
+                    textfont: {
+                        size: 10
+                    },
+                    hovertemplate: 
+                        '%{text}<br>' +
+                        'EV: %{x:.1f} km/s<br>' +
+                        'Thrust: %{y:.0f} kN<br>' +
+                        '<extra></extra>'
+                });
+            }
+
+
+            const layout = {
+                font: {
+                    family: 'Roboto, Arial, sans-serif',
+                    size: 16,
+                    color: '#333333'
+                },
+                xaxis: {
+                    title: {
+                        text: 'Exhaust Velocity (km/s)',
+                        font: {
+                            size: 20
+                        }
+                    },
+                    type: 'log',
+                    showgrid: true,
+                    gridcolor: '#cccccc',
+                    gridwidth: 2,
+                    showline: true,
+                    linecolor: '#000000',
+                    linewidth: 2,
+                    mirror: true,
+                    tickmode: 'array',
+                    tickvals: [1, 10, 100, 1000, 10000, 100000]
+                },
+                yaxis: {
+                    title: {
+                        text: 'Thrust (kN)',
+                        font: {
+                            size: 20
+                        }
+                    },
+                    type: 'log',
+                    showgrid: true,
+                    gridcolor: '#cccccc',
+                    gridwidth: 1,
+                    showline: true,
+                    linecolor: '#333333',
+                    linewidth: 2,
+                    mirror: true,
+                    tickmode: 'array',
+                    tickvals: [1, 10, 100, 1000, 10000, 100000]
+                },
+                plot_bgcolor: 'white',
+                paper_bgcolor: 'white',
+                showlegend: true,
+            };
+
+
+            Plotly.newPlot('plot', traces, layout, {responsive: true});
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'f' || e.key === 'F') {
+                const elem = document.getElementById('plot');
+
+                if (!document.fullscreenElement) {
+                    // Enter fullscreen
+                    if (elem.requestFullscreen) {
+                        elem.requestFullscreen();
+                    } else if (elem.webkitRequestFullscreen) {
+                        elem.webkitRequestFullscreen();
+                    } else if (elem.msRequestFullscreen) {
+                        elem.msRequestFullscreen();
+                    }
+                } else {
+                    // Exit fullscreen
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    } else if (document.msExitFullscreen) {
+                        document.msExitFullscreen();
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
