@@ -93,6 +93,11 @@
                     base_name = base_name.replace('Drive', '').replace('Rocket', '').trim();
                 }
 
+                // Rename 'Neutron Flux' to 'Poseidon'
+                if (base_name.startsWith('Neutron Flux')) {
+                    base_name = base_name.replace('Neutron Flux', 'Poseidon').trim();
+                }
+
                 const multiplier = drive.thrusters;
                 let drive_class = drive.driveClassification || 'Unknown';
 
@@ -195,7 +200,7 @@
                         size: 10
                     },
                     customdata: coords.customdata,
-                    hovertemplate: 
+                    hovertemplate:
                         '%{text}<br>' +
                         'EV: %{x:.1f} km/s<br>' +
                         'Thrust: %{y:.0f} kN<br>' +
@@ -306,7 +311,7 @@
         });
 
 
-    
+
     </script>
 </body>
 </html>
